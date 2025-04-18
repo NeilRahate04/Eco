@@ -1,13 +1,37 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "http";
+import cors from "cors";
+import cookieParser from "cookie-parser";
 import { storage } from "./storage";
 import { tripSearchSchema, carbonCalcSchema, insertTripSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 
+// Import route modules
+import authRoutes from "./routes/auth";
+import usersRoutes from "./routes/users";
+import plansRoutes from "./routes/plans";
+import carbonRoutes from "./routes/carbon";
+import reviewsRoutes from "./routes/reviews";
+import adminRoutes from "./routes/admin";
+import listingsRoutes from "./routes/listings";
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Middleware
+  app.use(cors());
+  app.use(cookieParser());
+
   // API Routes
   const apiRouter = express.Router();
+  
+  // Mount route modules
+  apiRouter.use("/auth", authRoutes);
+  apiRouter.use("/users", usersRoutes);
+  apiRouter.use("/plans", plansRoutes);
+  apiRouter.use("/carbon", carbonRoutes);
+  apiRouter.use("/reviews", reviewsRoutes);
+  apiRouter.use("/admin", adminRoutes);
+  apiRouter.use("/listings", listingsRoutes);
   
   // Destinations routes
   apiRouter.get("/destinations", async (req, res) => {
@@ -193,7 +217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Trips routes
+  // Trips routes - these will be migrated to plans.ts in future
   apiRouter.get("/trips", async (req, res) => {
     try {
       // In a real app, we would get the user ID from the authenticated session
@@ -224,7 +248,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mount the API router
   app.use("/api", apiRouter);
+
+  // 404 handler for API routes
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ message: "API endpoint not found" });
+  });
 
   const httpServer = createServer(app);
   return httpServer;

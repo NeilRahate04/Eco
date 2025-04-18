@@ -1,8 +1,11 @@
 import { 
-  users, type User, type InsertUser,
+  users, type User, type InsertUser, type UserPreferences,
   destinations, type Destination, type InsertDestination,
   transportOptions, type TransportOption, type InsertTransportOption,
-  trips, type Trip, type InsertTrip
+  trips, type Trip, type InsertTrip,
+  carbonRecords, type CarbonRecord, type InsertCarbonRecord,
+  listings, type Listing, type InsertListing,
+  reviews, type Review, type InsertReview
 } from "@shared/schema";
 
 // Interface for storage operations
@@ -10,7 +13,9 @@ export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserPreferences(userId: number, preferences: UserPreferences): Promise<User | undefined>;
   
   // Destination operations
   getDestinations(): Promise<Destination[]>;
@@ -24,9 +29,32 @@ export interface IStorage {
   
   // Trip operations
   getTrips(userId: number): Promise<Trip[]>;
+  getTripsByDestination(destination: string): Promise<Trip[]>;
   getTrip(id: number): Promise<Trip | undefined>;
   createTrip(trip: InsertTrip): Promise<Trip>;
+  deleteTrip(id: number): Promise<boolean>;
+  
+  // Carbon footprint operations
   calculateCarbonFootprint(fromLocation: string, toLocation: string, transportType: string, passengers: number): Promise<number>;
+  getCarbonRecords(userId: number): Promise<CarbonRecord[]>;
+  createCarbonRecord(record: InsertCarbonRecord): Promise<CarbonRecord>;
+  
+  // Listings operations
+  getListings(): Promise<Listing[]>;
+  getListing(id: number): Promise<Listing | undefined>;
+  createListing(listing: InsertListing): Promise<Listing>;
+  updateListing(id: number, listing: Partial<InsertListing>): Promise<Listing | undefined>;
+  deleteListing(id: number): Promise<boolean>;
+  
+  // Reviews operations
+  getReviews(serviceType: string, serviceId: number): Promise<Review[]>;
+  getReview(id: number): Promise<Review | undefined>;
+  createReview(review: InsertReview): Promise<Review>;
+  approveReview(id: number): Promise<Review | undefined>;
+  getDestinationReviews(destination: string): Promise<Review[]>;
+  
+  // Session store
+  sessionStore: any;
 }
 
 export class MemStorage implements IStorage {
@@ -34,23 +62,47 @@ export class MemStorage implements IStorage {
   private destinations: Map<number, Destination>;
   private transportOptions: Map<number, TransportOption>;
   private trips: Map<number, Trip>;
+  private carbonRecords: Map<number, CarbonRecord>;
+  private listings: Map<number, Listing>;
+  private reviews: Map<number, Review>;
+  public sessionStore: any;
   
   // Auto-incrementing IDs
   private userCurrentId: number;
   private destinationCurrentId: number;
   private transportOptionCurrentId: number;
   private tripCurrentId: number;
+  private carbonRecordCurrentId: number;
+  private listingCurrentId: number;
+  private reviewCurrentId: number;
 
   constructor() {
     this.users = new Map();
     this.destinations = new Map();
     this.transportOptions = new Map();
     this.trips = new Map();
+    this.carbonRecords = new Map();
+    this.listings = new Map();
+    this.reviews = new Map();
+    
+    // Create a simple in-memory session store
+    this.sessionStore = {
+      get: () => Promise.resolve(),
+      set: () => Promise.resolve(),
+      destroy: () => Promise.resolve(),
+      all: () => Promise.resolve([]),
+      clear: () => Promise.resolve(),
+      length: () => Promise.resolve(0),
+      touch: () => Promise.resolve()
+    };
     
     this.userCurrentId = 1;
     this.destinationCurrentId = 1;
     this.transportOptionCurrentId = 1;
     this.tripCurrentId = 1;
+    this.carbonRecordCurrentId = 1;
+    this.listingCurrentId = 1;
+    this.reviewCurrentId = 1;
     
     // Initialize with sample data
     this.initializeTransportOptions();
@@ -67,12 +119,36 @@ export class MemStorage implements IStorage {
       (user) => user.username === username,
     );
   }
+  
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.email === email,
+    );
+  }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userCurrentId++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id, 
+      preferences: null, 
+      createdAt: new Date() 
+    };
     this.users.set(id, user);
     return user;
+  }
+  
+  async updateUserPreferences(userId: number, preferences: UserPreferences): Promise<User | undefined> {
+    const user = await this.getUser(userId);
+    if (!user) return undefined;
+    
+    const updatedUser: User = {
+      ...user,
+      preferences
+    };
+    
+    this.users.set(userId, updatedUser);
+    return updatedUser;
   }
   
   // Destination methods
@@ -86,7 +162,11 @@ export class MemStorage implements IStorage {
   
   async createDestination(destination: InsertDestination): Promise<Destination> {
     const id = this.destinationCurrentId++;
-    const newDestination: Destination = { ...destination, id };
+    const newDestination: Destination = { 
+      ...destination, 
+      id, 
+      createdAt: new Date() 
+    };
     this.destinations.set(id, newDestination);
     return newDestination;
   }
@@ -102,7 +182,11 @@ export class MemStorage implements IStorage {
   
   async createTransportOption(option: InsertTransportOption): Promise<TransportOption> {
     const id = this.transportOptionCurrentId++;
-    const newOption: TransportOption = { ...option, id };
+    const newOption: TransportOption = { 
+      ...option, 
+      id, 
+      createdAt: new Date() 
+    };
     this.transportOptions.set(id, newOption);
     return newOption;
   }
@@ -110,6 +194,12 @@ export class MemStorage implements IStorage {
   // Trip methods
   async getTrips(userId: number): Promise<Trip[]> {
     return Array.from(this.trips.values()).filter(trip => trip.userId === userId);
+  }
+  
+  async getTripsByDestination(destination: string): Promise<Trip[]> {
+    return Array.from(this.trips.values()).filter(trip => 
+      trip.toLocation.toLowerCase().includes(destination.toLowerCase())
+    );
   }
   
   async getTrip(id: number): Promise<Trip | undefined> {
@@ -121,10 +211,118 @@ export class MemStorage implements IStorage {
     const newTrip: Trip = { 
       ...trip, 
       id, 
+      userId: trip.userId || null,
+      transportOptionId: trip.transportOptionId || null,
       createdAt: new Date() 
     };
     this.trips.set(id, newTrip);
     return newTrip;
+  }
+  
+  async deleteTrip(id: number): Promise<boolean> {
+    return this.trips.delete(id);
+  }
+  
+  // Carbon record methods
+  async getCarbonRecords(userId: number): Promise<CarbonRecord[]> {
+    return Array.from(this.carbonRecords.values()).filter(record => record.userId === userId);
+  }
+  
+  async createCarbonRecord(record: InsertCarbonRecord): Promise<CarbonRecord> {
+    const id = this.carbonRecordCurrentId++;
+    const newRecord: CarbonRecord = {
+      ...record,
+      id,
+      createdAt: new Date()
+    };
+    this.carbonRecords.set(id, newRecord);
+    return newRecord;
+  }
+  
+  // Listing methods
+  async getListings(): Promise<Listing[]> {
+    return Array.from(this.listings.values());
+  }
+  
+  async getListing(id: number): Promise<Listing | undefined> {
+    return this.listings.get(id);
+  }
+  
+  async createListing(listing: InsertListing): Promise<Listing> {
+    const id = this.listingCurrentId++;
+    const newListing: Listing = {
+      ...listing,
+      id,
+      createdAt: new Date()
+    };
+    this.listings.set(id, newListing);
+    return newListing;
+  }
+  
+  async updateListing(id: number, listing: Partial<InsertListing>): Promise<Listing | undefined> {
+    const existingListing = await this.getListing(id);
+    if (!existingListing) return undefined;
+    
+    const updatedListing: Listing = {
+      ...existingListing,
+      ...listing
+    };
+    
+    this.listings.set(id, updatedListing);
+    return updatedListing;
+  }
+  
+  async deleteListing(id: number): Promise<boolean> {
+    return this.listings.delete(id);
+  }
+  
+  // Review methods
+  async getReviews(serviceType: string, serviceId: number): Promise<Review[]> {
+    return Array.from(this.reviews.values()).filter(
+      review => review.serviceType === serviceType && review.serviceId === serviceId
+    );
+  }
+  
+  async getReview(id: number): Promise<Review | undefined> {
+    return this.reviews.get(id);
+  }
+  
+  async createReview(review: InsertReview): Promise<Review> {
+    const id = this.reviewCurrentId++;
+    const newReview: Review = {
+      ...review,
+      id,
+      createdAt: new Date()
+    };
+    this.reviews.set(id, newReview);
+    return newReview;
+  }
+  
+  async approveReview(id: number): Promise<Review | undefined> {
+    const review = await this.getReview(id);
+    if (!review) return undefined;
+    
+    const approvedReview: Review = {
+      ...review,
+      approved: true
+    };
+    
+    this.reviews.set(id, approvedReview);
+    return approvedReview;
+  }
+  
+  async getDestinationReviews(destination: string): Promise<Review[]> {
+    // First find all destination IDs that match the name
+    const destinationIds = Array.from(this.destinations.values())
+      .filter(dest => dest.name.toLowerCase().includes(destination.toLowerCase()))
+      .map(dest => dest.id);
+    
+    // Then find all reviews for those destinations
+    return Array.from(this.reviews.values()).filter(
+      review => review.serviceType === 'destination' && 
+                destinationIds.includes(review.serviceId) &&
+                review.approved
+    );
   }
   
   // Carbon footprint calculation

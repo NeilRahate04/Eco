@@ -132,7 +132,8 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id, 
       preferences: null, 
-      createdAt: new Date() 
+      createdAt: new Date(),
+      role: insertUser.role || 'user' // Ensure role is never undefined
     };
     this.users.set(id, user);
     return user;
@@ -165,7 +166,8 @@ export class MemStorage implements IStorage {
     const newDestination: Destination = { 
       ...destination, 
       id, 
-      createdAt: new Date() 
+      createdAt: new Date(),
+      ecoCertified: destination.ecoCertified ?? false // Ensure ecoCertified is never undefined
     };
     this.destinations.set(id, newDestination);
     return newDestination;
@@ -233,6 +235,8 @@ export class MemStorage implements IStorage {
     const newRecord: CarbonRecord = {
       ...record,
       id,
+      tripId: record.tripId || null, // Ensure tripId is never undefined
+      details: record.details || null, // Ensure details is never undefined
       createdAt: new Date()
     };
     this.carbonRecords.set(id, newRecord);
@@ -292,6 +296,7 @@ export class MemStorage implements IStorage {
     const newReview: Review = {
       ...review,
       id,
+      approved: review.approved ?? false, // Ensure approved is never undefined
       createdAt: new Date()
     };
     this.reviews.set(id, newReview);

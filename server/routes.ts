@@ -4,6 +4,7 @@ import { MongoDBStorage } from "./mongodb-storage";
 import { tripSearchSchema, carbonCalcSchema, insertTripSchema } from "@shared/mongodb-schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { Types } from "mongoose";
 
 // Import route modules
 import authRoutes from "./routes/auth";
@@ -138,7 +139,7 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid destination ID" });
       }
       
-      const destination = await storage.getDestination(id);
+      const destination = await storage.getDestination(new Types.ObjectId(id));
       if (!destination) {
         return res.status(404).json({ message: "Destination not found" });
       }
@@ -164,23 +165,18 @@ export function registerRoutes(app: Express) {
     try {
       const searchData = tripSearchSchema.parse(req.body);
       
-      // In a real app, this would search for routes between locations
-      // For this demo, we'll return mock transport options with calculated values
       const transportOptions = await storage.getTransportOptions();
       
-      // Calculate carbon footprint for each transport option
       const results = await Promise.all(
         transportOptions.map(async (option) => {
           const carbonFootprint = await storage.calculateCarbonFootprint(
-            searchData.from,
-            searchData.to,
+            searchData.fromLocation,
+            searchData.toLocation,
             option.type,
-            1 // Default to 1 passenger
+            1
           );
           
-          // Calculate duration based on distance and transport type
-          // This is simplified for demo purposes
-          const distance = 500; // Default 500km
+          const distance = 500;
           let speedKmh;
           
           switch (option.type) {
@@ -210,15 +206,10 @@ export function registerRoutes(app: Express) {
         })
       );
       
-      // Sort by eco-priority if requested
-      if (searchData.ecoPriority) {
-        results.sort((a, b) => a.carbonFootprint - b.carbonFootprint);
-      }
-      
       res.json({
-        from: searchData.from,
-        to: searchData.to,
-        date: searchData.when,
+        from: searchData.fromLocation,
+        to: searchData.toLocation,
+        date: searchData.departureDate,
         results
       });
     } catch (error) {
@@ -236,63 +227,50 @@ export function registerRoutes(app: Express) {
   apiRouter.post("/calculate-carbon", async (req, res) => {
     try {
       const calcData = carbonCalcSchema.parse(req.body);
+      const transportOption = await storage.getTransportOption(calcData.transportOptionId);
       
-      const transportOptions = await storage.getTransportOptions();
-      
-      // Calculate carbon footprint for each transport option
-      const results = await Promise.all(
-        transportOptions.map(async (option) => {
-          const carbonFootprint = await storage.calculateCarbonFootprint(
-            calcData.from,
-            calcData.to,
-            option.type,
-            calcData.passengers
-          );
-          
-          // Calculate duration based on distance and transport type
-          // This is simplified for demo purposes
-          const distance = 500; // Default 500km
-          let speedKmh;
-          
-          switch (option.type) {
-            case 'train':
-              speedKmh = 80;
-              break;
-            case 'bus':
-              speedKmh = 60;
-              break;
-            case 'car':
-              speedKmh = 90;
-              break;
-            case 'plane':
-              speedKmh = 800;
-              break;
-            default:
-              speedKmh = 70;
-          }
-          
-          const durationMinutes = Math.round((distance / speedKmh) * 60);
-          const durationHours = Math.floor(durationMinutes / 60);
-          const remainingMinutes = durationMinutes % 60;
-          const durationFormatted = `${durationHours} hours ${remainingMinutes} minutes`;
-          
-          return {
-            transportOption: option,
-            carbonFootprint,
-            durationMinutes,
-            durationFormatted
-          };
-        })
+      if (!transportOption) {
+        return res.status(404).json({ message: "Transport option not found" });
+      }
+
+      const carbonFootprint = await storage.calculateCarbonFootprint(
+        "origin",
+        "destination",
+        transportOption.type,
+        1
       );
       
-      // Sort by carbon footprint (lowest first)
-      results.sort((a, b) => a.carbonFootprint - b.carbonFootprint);
+      const distance = calcData.distance;
+      let speedKmh;
+      
+      switch (transportOption.type) {
+        case 'train':
+          speedKmh = 80;
+          break;
+        case 'bus':
+          speedKmh = 60;
+          break;
+        case 'car':
+          speedKmh = 90;
+          break;
+        case 'plane':
+          speedKmh = 800;
+          break;
+        default:
+          speedKmh = 70;
+      }
+      
+      const durationMinutes = Math.round((distance / speedKmh) * 60);
+      const durationHours = Math.floor(durationMinutes / 60);
+      const remainingMinutes = durationMinutes % 60;
+      const durationFormatted = `${durationHours} hours ${remainingMinutes} minutes`;
       
       res.json({
-        from: calcData.from,
-        to: calcData.to,
-        passengers: calcData.passengers,
-        results
+        distance: calcData.distance,
+        transportOption,
+        carbonFootprint,
+        durationMinutes,
+        durationFormatted
       });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -308,9 +286,7 @@ export function registerRoutes(app: Express) {
   // Trips routes - these will be migrated to plans.ts in future
   apiRouter.get("/trips", async (req, res) => {
     try {
-      // In a real app, we would get the user ID from the authenticated session
-      // For this demo, we'll use a default user ID
-      const userId = 1;
+      const userId = new Types.ObjectId(1);
       
       const trips = await storage.getTrips(userId);
       res.json(trips);

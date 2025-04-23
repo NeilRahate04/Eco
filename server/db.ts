@@ -12,11 +12,14 @@ export const connectDB = async () => {
     console.log('Using URI:', MONGODB_URI.replace(/\/\/[^@]*@/, '//****:****@')); // Hide credentials in logs
 
     await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
       retryWrites: true,
-      w: 'majority'
+      w: 'majority',
+      connectTimeoutMS: 10000,
+      heartbeatFrequencyMS: 10000,
+      retryReads: true
     });
 
     console.log('MongoDB connected successfully');

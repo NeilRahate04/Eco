@@ -37,7 +37,7 @@ export default defineConfig({
     port: 5375,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'https://eco-9w2a.onrender.com',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path // Keep the /api prefix

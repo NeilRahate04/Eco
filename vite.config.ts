@@ -30,8 +30,8 @@ export default defineConfig({
   },
   root: path.resolve(__dirname, "client"),
   build: {
-    outDir: path.resolve(__dirname, "dist/public"),
-    emptyOutDir: false,
+    outDir: path.resolve(__dirname, "client/dist"),
+    emptyOutDir: true,
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       input: {

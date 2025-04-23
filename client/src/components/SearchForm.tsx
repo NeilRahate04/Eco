@@ -4,48 +4,43 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { tripSearchSchema, type TripSearch } from "@shared/schema";
+import { tripSearchSchema, type TripSearch } from "@shared/mongodb-schema";
 import { apiRequest } from "@/lib/queryClient";
 
 interface SearchFormProps {
-  onSearchResults?: (results: any) => void;
+  onSearchResults: (results: any) => void;
   className?: string;
 }
 
 const SearchForm = ({ onSearchResults, className }: SearchFormProps) => {
-  const [isSearching, setIsSearching] = useState(false);
   const { toast } = useToast();
-
+  const [isSearching, setIsSearching] = useState(false);
+  
   const form = useForm<TripSearch>({
     resolver: zodResolver(tripSearchSchema),
     defaultValues: {
-      from: "",
-      to: "",
-      when: new Date().toISOString().split('T')[0],
-      ecoPriority: false
-    }
+      fromLocation: "",
+      toLocation: "",
+      departureDate: new Date(),
+    },
   });
 
   const onSubmit = async (data: TripSearch) => {
     setIsSearching(true);
     try {
-      const response = await apiRequest("POST", "/api/trip-search", data);
-      const results = await response.json();
-      
-      if (onSearchResults) {
-        onSearchResults(results);
-      }
+      const response = await apiRequest("POST", "/api/trips/search", data);
+      onSearchResults(response);
       
       toast({
         title: "Routes found!",
-        description: `Found routes from ${data.from} to ${data.to}`,
+        description: `Found routes from ${data.fromLocation} to ${data.toLocation}`,
       });
     } catch (error) {
+      console.error("Search error:", error);
       toast({
-        title: "Search failed",
-        description: error instanceof Error ? error.message : "Failed to search for routes",
+        title: "Error",
+        description: "Failed to search for routes",
         variant: "destructive",
       });
     } finally {
@@ -60,17 +55,14 @@ const SearchForm = ({ onSearchResults, className }: SearchFormProps) => {
           <div className="grid md:grid-cols-3 gap-4">
             <FormField
               control={form.control}
-              name="from"
+              name="fromLocation"
               render={({ field }) => (
                 <FormItem className="col-span-3 md:col-span-1">
-                  <FormLabel className="text-neutral-darkest text-sm font-medium">From</FormLabel>
+                  <FormLabel>From</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <i className="fas fa-map-marker-alt text-neutral"></i>
-                      </div>
                       <Input 
-                        placeholder="Your location" 
+                        placeholder="Enter departure location" 
                         className="pl-10"
                         {...field} 
                       />
@@ -82,17 +74,14 @@ const SearchForm = ({ onSearchResults, className }: SearchFormProps) => {
             
             <FormField
               control={form.control}
-              name="to"
+              name="toLocation"
               render={({ field }) => (
                 <FormItem className="col-span-3 md:col-span-1">
-                  <FormLabel className="text-neutral-darkest text-sm font-medium">To</FormLabel>
+                  <FormLabel>To</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <i className="fas fa-map-marker text-neutral"></i>
-                      </div>
                       <Input 
-                        placeholder="Destination" 
+                        placeholder="Enter destination" 
                         className="pl-10"
                         {...field} 
                       />
@@ -104,61 +93,28 @@ const SearchForm = ({ onSearchResults, className }: SearchFormProps) => {
             
             <FormField
               control={form.control}
-              name="when"
+              name="departureDate"
               render={({ field }) => (
                 <FormItem className="col-span-3 md:col-span-1">
-                  <FormLabel className="text-neutral-darkest text-sm font-medium">When</FormLabel>
+                  <FormLabel>Departure Date</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <i className="fas fa-calendar text-neutral"></i>
-                      </div>
                       <Input 
-                        type="date" 
-                        className="pl-10"
-                        {...field} 
+                        type="date"
+                        {...field}
+                        value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : field.value}
+                        onChange={(e) => field.onChange(new Date(e.target.value))}
                       />
                     </div>
                   </FormControl>
                 </FormItem>
               )}
             />
-            
-            <div className="col-span-3">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-1">
-                <FormField
-                  control={form.control}
-                  name="ecoPriority"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-2 space-y-0 mb-2 sm:mb-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <FormLabel className="text-sm text-neutral-dark">
-                        Prioritize lowest carbon footprint
-                      </FormLabel>
-                    </FormItem>
-                  )}
-                />
-                
-                <Button 
-                  type="submit" 
-                  className="inline-flex justify-center items-center px-6 py-3 text-base font-medium rounded-md w-full sm:w-auto"
-                  disabled={isSearching}
-                >
-                  {isSearching ? (
-                    <i className="fas fa-spinner fa-spin mr-2"></i>
-                  ) : (
-                    <i className="fas fa-search mr-2"></i>
-                  )}
-                  Find Routes
-                </Button>
-              </div>
-            </div>
           </div>
+          
+          <Button type="submit" className="mt-4" disabled={isSearching}>
+            {isSearching ? "Searching..." : "Search"}
+          </Button>
         </form>
       </Form>
     </div>

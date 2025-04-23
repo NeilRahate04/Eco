@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Card } from "@/components/ui/card";
-import type { Destination } from "@shared/schema";
+import { useState } from 'react';
+import { Link } from 'wouter';
+import { Destination } from '@shared/mongodb-schema';
+import { Button } from '@/components/ui/button';
+import { Heart, Star } from 'lucide-react';
 
 interface DestinationCardProps {
   destination: Destination;
@@ -8,60 +10,51 @@ interface DestinationCardProps {
 
 const DestinationCard = ({ destination }: DestinationCardProps) => {
   const [isSaved, setIsSaved] = useState(false);
-  
-  const toggleSave = () => {
+
+  const handleSave = () => {
     setIsSaved(!isSaved);
+    // TODO: Implement save functionality
   };
 
-  // Format rating from 0-50 to 0-5 with one decimal place
-  const formattedRating = (destination.rating / 10).toFixed(1);
-  
+  const formatRating = (rating: number) => {
+    return rating.toFixed(1);
+  };
+
   return (
-    <Card className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow">
-      <div className="relative">
-        <img 
-          src={destination.image_url}
-          alt={`${destination.name} - ${destination.description}`}
-          className="w-full h-48 object-cover"
-        />
-        {destination.ecoCertified && (
-          <div className="absolute top-0 right-0 mt-4 mr-4 bg-primary-light text-primary px-2 py-1 rounded-md text-xs font-medium">
-            <i className="fas fa-leaf mr-1"></i> Eco-Certified
-          </div>
-        )}
-      </div>
-      <div className="p-4">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-heading font-semibold text-lg text-neutral-darkest">{destination.name}</h3>
-          <div className="flex items-center">
-            <span className="text-accent-dark font-semibold mr-1">{formattedRating}</span>
-            <i className="fas fa-star text-accent-dark text-sm"></i>
-          </div>
-        </div>
-        <p className="text-neutral-dark text-sm mb-3">{destination.description}</p>
-        <div className="flex justify-between items-end">
-          <div className="flex items-center">
-            <div className={`
-              flex items-center text-xs px-2 py-1 rounded-md
-              ${destination.carbonScore === 1 
-                ? 'bg-success bg-opacity-10 text-success' 
-                : destination.carbonScore === 2 
-                  ? 'bg-warning bg-opacity-10 text-warning' 
-                  : 'bg-error bg-opacity-10 text-error'}
-            `}>
-              <i className={`fas ${destination.carbonScore === 1 ? 'fa-leaf' : 'fa-plane'} mr-1`}></i>
-              <span>{destination.carbonImpact}</span>
+    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+      <Link href={`/destinations/${destination._id}`}>
+        <div className="cursor-pointer">
+          <img
+            src={destination.image_url}
+            alt={destination.name}
+            className="w-full h-48 object-cover"
+          />
+          <div className="p-4">
+            <h3 className="text-lg font-semibold mb-2">{destination.name}</h3>
+            <p className="text-gray-600 mb-2">{destination.description}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Star className="w-4 h-4 text-yellow-400 mr-1" />
+                <span className="text-sm font-medium">
+                  {formatRating(destination.rating)}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSave();
+                }}
+                className={isSaved ? 'text-red-500' : 'text-gray-400'}
+              >
+                <Heart className="w-5 h-5" fill={isSaved ? 'currentColor' : 'none'} />
+              </Button>
             </div>
           </div>
-          <button 
-            className="text-primary hover:text-primary-dark"
-            onClick={toggleSave}
-          >
-            <i className={isSaved ? "fas fa-heart" : "far fa-heart"}></i>
-          </button>
         </div>
-      </div>
-    </Card>
+      </Link>
+    </div>
   );
 };
 

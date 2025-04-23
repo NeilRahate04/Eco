@@ -2,7 +2,17 @@ import express from 'express';
 import { storage } from '../storage';
 import { verifyToken } from '../middleware/auth';
 import { validateSchema } from '../middleware/validate';
-import { insertTripSchema } from '@shared/schema';
+import { insertTripSchema } from "@shared/mongodb-schema";
+import { Types } from 'mongoose';
+import { ZodError } from 'zod';
+import { fromZodError } from 'zod-validation-error';
+
+// Extend the Request type to include sessionID
+declare module 'express-serve-static-core' {
+  interface Request {
+    sessionID: string;
+  }
+}
 
 const router = express.Router();
 
@@ -12,35 +22,42 @@ const router = express.Router();
  */
 router.post('/', verifyToken, validateSchema(insertTripSchema), async (req, res) => {
   try {
-    // Set user ID from authenticated user
-    const tripData = {
+    // Get the session
+    const session = await storage.sessionStore.get(req.sessionID);
+    if (!session) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+    
+    // Create trip
+    const trip = await storage.createTrip({
       ...req.body,
-      userId: req.user?.id
-    };
+      userId: new Types.ObjectId(session.userId)
+    });
     
-    // Create the trip plan
-    const plan = await storage.createTrip(tripData);
-    
-    // Create carbon record if carbon footprint is provided
-    if (plan.carbonFootprint) {
+    // If the trip includes carbon information, record it
+    if (req.body.carbonFootprint && req.body.carbonFootprint > 0) {
       await storage.createCarbonRecord({
-        userId: req.user?.id!,
-        tripId: plan.id,
-        footprintValue: plan.carbonFootprint,
+        userId: new Types.ObjectId(session.userId),
+        tripId: trip._id,
+        footprintValue: req.body.carbonFootprint,
         details: {
-          transportType: plan.transportOptionId ? 
-            (await storage.getTransportOption(plan.transportOptionId))?.type : 'unknown',
-          fromLocation: plan.fromLocation,
-          toLocation: plan.toLocation,
-          date: plan.departureDate
+          fromLocation: trip.fromLocation,
+          toLocation: trip.toLocation,
+          transportType: trip.transportOptionId ? 'transport' : 'unknown'
         }
       });
     }
     
-    res.status(201).json(plan);
+    res.status(201).json(trip);
   } catch (error) {
-    console.error('Create plan error:', error);
-    res.status(500).json({ message: 'Server error creating plan' });
+    console.error('Create trip error:', error);
+    if (error instanceof ZodError) {
+      return res.status(400).json({ 
+        message: 'Invalid trip data', 
+        errors: fromZodError(error).message 
+      });
+    }
+    res.status(500).json({ message: 'Server error creating trip' });
   }
 });
 
@@ -48,20 +65,22 @@ router.post('/', verifyToken, validateSchema(insertTripSchema), async (req, res)
  * Get all trips by destination
  * GET /api/plans/destination/:destination
  */
-router.get('/destination/:destination', verifyToken, async (req, res) => {
+router.get('/destination/:destination', async (req, res) => {
   try {
     const destination = req.params.destination;
-    const plans = await storage.getTripsByDestination(destination);
     
-    // Filter to only show public plans or user's own plans
-    const filteredPlans = plans.filter(plan => 
-      plan.userId === req.user?.id || req.user?.role === 'admin'
-    );
+    const trips = await storage.getTripsByDestination(destination);
     
-    res.json(filteredPlans);
+    // For public consumption, filter out sensitive data
+    const publicTrips = trips.map(trip => {
+      const { userId, ...publicTrip } = trip;
+      return publicTrip;
+    });
+    
+    res.json(publicTrips);
   } catch (error) {
-    console.error('Get plans by destination error:', error);
-    res.status(500).json({ message: 'Server error getting plans by destination' });
+    console.error('Get trips by destination error:', error);
+    res.status(500).json({ message: 'Server error getting trips' });
   }
 });
 
@@ -71,22 +90,51 @@ router.get('/destination/:destination', verifyToken, async (req, res) => {
  */
 router.get('/:id', verifyToken, async (req, res) => {
   try {
-    const planId = parseInt(req.params.id);
-    const plan = await storage.getTrip(planId);
+    const tripId = new Types.ObjectId(req.params.id);
     
-    if (!plan) {
-      return res.status(404).json({ message: 'Plan not found' });
+    // Get trip
+    const trip = await storage.getTrip(tripId);
+    if (!trip) {
+      return res.status(404).json({ message: 'Trip not found' });
     }
     
-    // Check if user has access to this plan
-    if (plan.userId !== req.user?.id && req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Forbidden: Access denied' });
+    // Get the session
+    const session = await storage.sessionStore.get(req.sessionID);
+    if (!session) {
+      return res.status(401).json({ message: 'Not authenticated' });
     }
     
-    res.json(plan);
+    // Check if user owns the trip
+    if (trip.userId.toString() !== session.userId.toString()) {
+      return res.status(403).json({ message: 'Not authorized to view this trip' });
+    }
+    
+    res.json(trip);
   } catch (error) {
-    console.error('Get plan error:', error);
-    res.status(500).json({ message: 'Server error getting plan' });
+    console.error('Get trip error:', error);
+    res.status(500).json({ message: 'Server error getting trip' });
+  }
+});
+
+/**
+ * Get all trips for the authenticated user
+ * GET /api/plans
+ */
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    // Get the session
+    const session = await storage.sessionStore.get(req.sessionID);
+    if (!session) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+    
+    // Get trips
+    const trips = await storage.getTrips(new Types.ObjectId(session.userId));
+    
+    res.json(trips);
+  } catch (error) {
+    console.error('Get trips error:', error);
+    res.status(500).json({ message: 'Server error getting trips' });
   }
 });
 
@@ -96,27 +144,35 @@ router.get('/:id', verifyToken, async (req, res) => {
  */
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
-    const planId = parseInt(req.params.id);
-    const plan = await storage.getTrip(planId);
+    const tripId = new Types.ObjectId(req.params.id);
     
-    if (!plan) {
-      return res.status(404).json({ message: 'Plan not found' });
+    // Get trip
+    const trip = await storage.getTrip(tripId);
+    if (!trip) {
+      return res.status(404).json({ message: 'Trip not found' });
     }
     
-    // Check if user owns this plan
-    if (plan.userId !== req.user?.id && req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Forbidden: Cannot delete another user\'s plan' });
+    // Get the session
+    const session = await storage.sessionStore.get(req.sessionID);
+    if (!session) {
+      return res.status(401).json({ message: 'Not authenticated' });
     }
     
-    const deleted = await storage.deleteTrip(planId);
+    // Check if user owns the trip
+    if (trip.userId.toString() !== session.userId.toString()) {
+      return res.status(403).json({ message: 'Not authorized to delete this trip' });
+    }
+    
+    // Delete trip
+    const deleted = await storage.deleteTrip(tripId);
     if (!deleted) {
-      return res.status(500).json({ message: 'Failed to delete plan' });
+      return res.status(500).json({ message: 'Failed to delete trip' });
     }
     
-    res.json({ message: 'Plan deleted successfully' });
+    res.json({ message: 'Trip deleted successfully' });
   } catch (error) {
-    console.error('Delete plan error:', error);
-    res.status(500).json({ message: 'Server error deleting plan' });
+    console.error('Delete trip error:', error);
+    res.status(500).json({ message: 'Server error deleting trip' });
   }
 });
 

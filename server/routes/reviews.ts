@@ -2,7 +2,8 @@ import express from 'express';
 import { storage } from '../storage';
 import { verifyToken, isAdmin } from '../middleware/auth';
 import { validateSchema } from '../middleware/validate';
-import { insertReviewSchema } from '@shared/schema';
+import { insertReviewSchema } from '@shared/mongodb-schema';
+import { Types } from 'mongoose';
 
 const router = express.Router();
 
@@ -12,10 +13,17 @@ const router = express.Router();
  */
 router.post('/', verifyToken, validateSchema(insertReviewSchema), async (req, res) => {
   try {
+    // Get the session
+    const session = await storage.sessionStore.get(req.sessionID);
+    if (!session) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
     // Set user ID from authenticated user
     const reviewData = {
       ...req.body,
-      userId: req.user?.id!,
+      userId: new Types.ObjectId(session.userId),
+      serviceId: new Types.ObjectId(req.body.serviceId),
       approved: req.user?.role === 'admin' // Auto-approve if admin
     };
     
@@ -60,7 +68,7 @@ router.get('/destination/:destination', async (req, res) => {
 router.get('/:serviceType/:serviceId', async (req, res) => {
   try {
     const serviceType = req.params.serviceType;
-    const serviceId = parseInt(req.params.serviceId);
+    const serviceId = new Types.ObjectId(req.params.serviceId);
     
     const reviews = await storage.getReviews(serviceType, serviceId);
     
@@ -80,7 +88,7 @@ router.get('/:serviceType/:serviceId', async (req, res) => {
  */
 router.put('/:id/approve', verifyToken, isAdmin, async (req, res) => {
   try {
-    const reviewId = parseInt(req.params.id);
+    const reviewId = new Types.ObjectId(req.params.id);
     
     // Get the review
     const review = await storage.getReview(reviewId);
@@ -118,10 +126,8 @@ router.get('/pending', verifyToken, isAdmin, async (req, res) => {
     // This is just a workaround since our storage doesn't have a direct getAllReviews method
     const serviceTypes = ['destination', 'transport', 'listing'];
     for (const serviceType of serviceTypes) {
-      // We just need a dummy ID to call the getReviews method
-      // In a real database implementation, we would have a proper query
       try {
-        const reviews = await storage.getReviews(serviceType, 0);
+        const reviews = await storage.getReviews(serviceType, new Types.ObjectId());
         allReviews.push(...reviews);
       } catch (error) {
         // Ignore errors in this demo implementation

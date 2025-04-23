@@ -1,10 +1,13 @@
 import express from 'express';
 import { storage } from '../storage';
 import { validateSchema } from '../middleware/validate';
-import { registerSchema, loginSchema } from '@shared/schema';
+import { registerSchema, loginSchema } from '@shared/mongodb-schema';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { verifyToken } from '../middleware/auth';
+import { Types } from 'mongoose';
+import { ZodError } from 'zod';
+import { fromZodError } from 'zod-validation-error';
 
 const router = express.Router();
 
@@ -14,34 +17,16 @@ const router = express.Router();
  */
 router.post('/register', validateSchema(registerSchema), async (req, res) => {
   try {
-    const { confirmPassword, ...userData } = req.body;
+    console.log('Registration request received:', { body: { ...req.body, password: '[REDACTED]' } });
     
-    // Check if username already exists
-    const existingUsername = await storage.getUserByUsername(userData.username);
-    if (existingUsername) {
-      return res.status(400).json({ message: 'Username already exists' });
-    }
-    
-    // Check if email already exists
-    const existingEmail = await storage.getUserByEmail(userData.email);
-    if (existingEmail) {
-      return res.status(400).json({ message: 'Email already exists' });
-    }
-    
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(userData.password, salt);
-    
-    // Create new user
-    const user = await storage.createUser({
-      ...userData,
-      password: hashedPassword,
-      role: userData.role || 'user' // Default to 'user' role
-    });
+    // Create new user using storage implementation
+    // The storage layer handles password hashing and validation
+    const user = await storage.createUser(req.body);
+    console.log('User created successfully:', { id: user._id.toString(), username: user.username });
     
     // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user._id.toString(), role: user.role },
       process.env.JWT_SECRET || 'dev-secret',
       { expiresIn: '7d' }
     );
@@ -49,13 +34,54 @@ router.post('/register', validateSchema(registerSchema), async (req, res) => {
     // Don't send the password in the response
     const { password, ...userWithoutPassword } = user;
     
+    // Convert MongoDB document to plain object and ensure _id is a string
+    const userResponse = {
+      ...userWithoutPassword,
+      _id: userWithoutPassword._id.toString()
+    };
+    
     res.status(201).json({
-      user: userWithoutPassword,
+      user: userResponse,
       token
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    
+    // Handle specific error cases
+    if (error instanceof ZodError) {
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors: fromZodError(error).message
+      });
+    }
+    
+    // Handle known error messages
+    if (error instanceof Error) {
+      if (error.message === 'Username already exists') {
+        return res.status(400).json({ 
+          message: error.message,
+          field: 'username'
+        });
+      }
+      if (error.message === 'Email already exists') {
+        return res.status(400).json({ 
+          message: error.message,
+          field: 'email'
+        });
+      }
+      if (error.message === 'Passwords do not match') {
+        return res.status(400).json({ 
+          message: error.message,
+          field: 'confirmPassword'
+        });
+      }
+    }
+    
+    // Generic server error
+    res.status(500).json({ 
+      message: 'Server error during registration',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
@@ -67,21 +93,21 @@ router.post('/login', validateSchema(loginSchema), async (req, res) => {
   try {
     const { username, password } = req.body;
     
-    // Find user by username
+    // Get user by username
     const user = await storage.getUserByUsername(username);
     if (!user) {
-      return res.status(401).json({ message: 'Invalid username or password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
     
-    // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid username or password' });
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
     
     // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user._id.toString(), role: user.role },
       process.env.JWT_SECRET || 'dev-secret',
       { expiresIn: '7d' }
     );
@@ -89,8 +115,14 @@ router.post('/login', validateSchema(loginSchema), async (req, res) => {
     // Don't send the password in the response
     const { password: _, ...userWithoutPassword } = user;
     
+    // Convert MongoDB document to plain object and ensure _id is a string
+    const userResponse = {
+      ...userWithoutPassword,
+      _id: userWithoutPassword._id.toString()
+    };
+    
     res.json({
-      user: userWithoutPassword,
+      user: userResponse,
       token
     });
   } catch (error) {
@@ -110,13 +142,17 @@ router.post('/logout', (req, res) => {
 });
 
 /**
- * Get current user info
+ * Get current user
  * GET /api/auth/me
  */
 router.get('/me', verifyToken, async (req, res) => {
   try {
-    // Get user from storage
-    const user = await storage.getUser(req.user?.id!);
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'User ID not found in token' });
+    }
+    
+    const userId = new Types.ObjectId(req.user.id);
+    const user = await storage.getUser(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -124,10 +160,16 @@ router.get('/me', verifyToken, async (req, res) => {
     // Don't send the password in the response
     const { password, ...userWithoutPassword } = user;
     
-    res.json(userWithoutPassword);
+    // Convert MongoDB document to plain object and ensure _id is a string
+    const userResponse = {
+      ...userWithoutPassword,
+      _id: userWithoutPassword._id.toString()
+    };
+    
+    res.json(userResponse);
   } catch (error) {
     console.error('Get current user error:', error);
-    res.status(500).json({ message: 'Server error getting user info' });
+    res.status(500).json({ message: 'Server error getting current user' });
   }
 });
 

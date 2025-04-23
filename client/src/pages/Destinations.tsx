@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import DestinationCard from "@/components/DestinationCard";
-import { type Destination } from "@shared/schema";
+import { type Destination } from "@shared/mongodb-schema";
 
 const Destinations = () => {
   const [searchTerm, setSearchTerm] = useState("");

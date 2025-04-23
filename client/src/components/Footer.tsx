@@ -31,11 +31,32 @@ const Footer = () => {
           <div className="md:col-span-1">
             <h3 className="font-heading font-semibold text-white mb-4">Explore</h3>
             <ul className="space-y-2">
-              <li><Link href="/destinations"><a className="text-neutral-light hover:text-white transition-colors">Destinations</a></Link></li>
-              <li><Link href="/plan-trip"><a className="text-neutral-light hover:text-white transition-colors">Transportation</a></Link></li>
+              <li>
+                <Link 
+                  href="/destinations" 
+                  className="text-neutral-light hover:text-white transition-colors"
+                >
+                  Destinations
+                </Link>
+              </li>
+              <li>
+                <Link 
+                  href="/plan-trip" 
+                  className="text-neutral-light hover:text-white transition-colors"
+                >
+                  Transportation
+                </Link>
+              </li>
               <li><a href="#" className="text-neutral-light hover:text-white transition-colors">Accommodations</a></li>
               <li><a href="#" className="text-neutral-light hover:text-white transition-colors">Experiences</a></li>
-              <li><Link href="/plan-trip"><a className="text-neutral-light hover:text-white transition-colors">Carbon Calculator</a></Link></li>
+              <li>
+                <Link 
+                  href="/plan-trip" 
+                  className="text-neutral-light hover:text-white transition-colors"
+                >
+                  Carbon Calculator
+                </Link>
+              </li>
             </ul>
           </div>
           

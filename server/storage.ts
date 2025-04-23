@@ -1,81 +1,92 @@
 import { 
-  users, type User, type InsertUser, type UserPreferences,
-  destinations, type Destination, type InsertDestination,
-  transportOptions, type TransportOption, type InsertTransportOption,
-  trips, type Trip, type InsertTrip,
-  carbonRecords, type CarbonRecord, type InsertCarbonRecord,
-  listings, type Listing, type InsertListing,
-  reviews, type Review, type InsertReview
-} from "@shared/schema";
+  type User, type UserPreferences,
+  type Destination,
+  type TransportOption,
+  type Trip,
+  type CarbonRecord,
+  type Listing,
+  type Review,
+  type InsertUser,
+  type InsertDestination,
+  type InsertTransportOption,
+  type InsertTrip,
+  type InsertCarbonRecord,
+  type InsertListing,
+  type InsertReview
+} from "@shared/mongodb-schema";
+import { Types } from 'mongoose';
 
 // Interface for storage operations
 export interface IStorage {
   // User operations
-  getUser(id: number): Promise<User | undefined>;
+  getUser(id: Types.ObjectId): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUserPreferences(userId: number, preferences: UserPreferences): Promise<User | undefined>;
+  updateUserPreferences(userId: Types.ObjectId, preferences: UserPreferences): Promise<User | undefined>;
   
   // Destination operations
   getDestinations(): Promise<Destination[]>;
-  getDestination(id: number): Promise<Destination | undefined>;
+  getDestination(id: Types.ObjectId): Promise<Destination | undefined>;
   createDestination(destination: InsertDestination): Promise<Destination>;
   
   // Transport options operations
   getTransportOptions(): Promise<TransportOption[]>;
-  getTransportOption(id: number): Promise<TransportOption | undefined>;
+  getTransportOption(id: Types.ObjectId): Promise<TransportOption | undefined>;
   createTransportOption(option: InsertTransportOption): Promise<TransportOption>;
   
   // Trip operations
-  getTrips(userId: number): Promise<Trip[]>;
+  getTrips(userId: Types.ObjectId): Promise<Trip[]>;
   getTripsByDestination(destination: string): Promise<Trip[]>;
-  getTrip(id: number): Promise<Trip | undefined>;
+  getTrip(id: Types.ObjectId): Promise<Trip | undefined>;
   createTrip(trip: InsertTrip): Promise<Trip>;
-  deleteTrip(id: number): Promise<boolean>;
+  deleteTrip(id: Types.ObjectId): Promise<boolean>;
   
   // Carbon footprint operations
   calculateCarbonFootprint(fromLocation: string, toLocation: string, transportType: string, passengers: number): Promise<number>;
-  getCarbonRecords(userId: number): Promise<CarbonRecord[]>;
+  getCarbonRecords(userId: Types.ObjectId): Promise<CarbonRecord[]>;
   createCarbonRecord(record: InsertCarbonRecord): Promise<CarbonRecord>;
   
   // Listings operations
   getListings(): Promise<Listing[]>;
-  getListing(id: number): Promise<Listing | undefined>;
+  getListing(id: Types.ObjectId): Promise<Listing | undefined>;
   createListing(listing: InsertListing): Promise<Listing>;
-  updateListing(id: number, listing: Partial<InsertListing>): Promise<Listing | undefined>;
-  deleteListing(id: number): Promise<boolean>;
+  updateListing(id: Types.ObjectId, listing: Partial<InsertListing>): Promise<Listing | undefined>;
   
-  // Reviews operations
-  getReviews(serviceType: string, serviceId: number): Promise<Review[]>;
-  getReview(id: number): Promise<Review | undefined>;
+  // Review operations
+  getReviews(serviceType: string, serviceId: Types.ObjectId): Promise<Review[]>;
+  getReview(id: Types.ObjectId): Promise<Review | undefined>;
   createReview(review: InsertReview): Promise<Review>;
-  approveReview(id: number): Promise<Review | undefined>;
+  approveReview(id: Types.ObjectId): Promise<Review | undefined>;
   getDestinationReviews(destination: string): Promise<Review[]>;
   
   // Session store
   sessionStore: any;
+
+  // Itinerary operations
+  createItinerary(data: { sourceCity: string; destinationCity: string; numberOfDays: number }): Promise<any>;
+  exportItineraryToPDF(itinerary: any): Promise<Buffer>;
+
+  getDestinationById(id: Types.ObjectId): Promise<Destination | null>;
+  getTransportOptionById(id: Types.ObjectId): Promise<TransportOption | null>;
+  getTripById(id: Types.ObjectId): Promise<Trip | null>;
+  getListingById(id: Types.ObjectId): Promise<Listing | null>;
+  getReviewById(id: Types.ObjectId): Promise<Review | null>;
+  getCarbonRecordById(id: Types.ObjectId): Promise<CarbonRecord | null>;
+  getUsers(): Promise<User[]>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private destinations: Map<number, Destination>;
-  private transportOptions: Map<number, TransportOption>;
-  private trips: Map<number, Trip>;
-  private carbonRecords: Map<number, CarbonRecord>;
-  private listings: Map<number, Listing>;
-  private reviews: Map<number, Review>;
+  private users: Map<string, User>;
+  private destinations: Map<string, Destination>;
+  private transportOptions: Map<string, TransportOption>;
+  private trips: Map<string, Trip>;
+  private carbonRecords: Map<string, CarbonRecord>;
+  private listings: Map<string, Listing>;
+  private reviews: Map<string, Review>;
+  private sessions: Map<string, any>;
   public sessionStore: any;
   
-  // Auto-incrementing IDs
-  private userCurrentId: number;
-  private destinationCurrentId: number;
-  private transportOptionCurrentId: number;
-  private tripCurrentId: number;
-  private carbonRecordCurrentId: number;
-  private listingCurrentId: number;
-  private reviewCurrentId: number;
-
   constructor() {
     this.users = new Map();
     this.destinations = new Map();
@@ -84,71 +95,196 @@ export class MemStorage implements IStorage {
     this.carbonRecords = new Map();
     this.listings = new Map();
     this.reviews = new Map();
+    this.sessions = new Map();
     
     // Create a simple in-memory session store
     this.sessionStore = {
-      get: () => Promise.resolve(),
-      set: () => Promise.resolve(),
-      destroy: () => Promise.resolve(),
-      all: () => Promise.resolve([]),
-      clear: () => Promise.resolve(),
-      length: () => Promise.resolve(0),
+      sessions: new Map(),
+      get: (sid: string) => Promise.resolve(this.sessions.get(sid)),
+      set: (sid: string, session: any) => {
+        this.sessions.set(sid, session);
+        return Promise.resolve();
+      },
+      destroy: (sid: string) => {
+        this.sessions.delete(sid);
+        return Promise.resolve();
+      },
+      all: () => Promise.resolve(Array.from(this.sessions.values())),
+      clear: () => {
+        this.sessions.clear();
+        return Promise.resolve();
+      },
+      length: () => Promise.resolve(this.sessions.size),
       touch: () => Promise.resolve()
     };
     
-    this.userCurrentId = 1;
-    this.destinationCurrentId = 1;
-    this.transportOptionCurrentId = 1;
-    this.tripCurrentId = 1;
-    this.carbonRecordCurrentId = 1;
-    this.listingCurrentId = 1;
-    this.reviewCurrentId = 1;
-    
     // Initialize with sample data
-    this.initializeTransportOptions();
-    this.initializeDestinations();
+    this.initializeData();
+  }
+
+  private async initializeData() {
+    try {
+      await this.initializeTransportOptions();
+      await this.initializeDestinations();
+    } catch (error) {
+      console.error('Failed to initialize sample data:', error);
+    }
+  }
+
+  private async initializeTransportOptions() {
+    const options: InsertTransportOption[] = [
+      {
+        name: "Train",
+        type: "rail",
+        icon: "train",
+        carbonPerKm: 0.041,
+        carbonCategory: "low",
+        colorClass: "bg-green-100 text-green-800"
+      },
+      {
+        name: "Bus",
+        type: "road",
+        icon: "bus",
+        carbonPerKm: 0.089,
+        carbonCategory: "medium",
+        colorClass: "bg-yellow-100 text-yellow-800"
+      },
+      {
+        name: "Car",
+        type: "road",
+        icon: "car",
+        carbonPerKm: 0.192,
+        carbonCategory: "high",
+        colorClass: "bg-red-100 text-red-800"
+      },
+      {
+        name: "Plane",
+        type: "air",
+        icon: "plane",
+        carbonPerKm: 0.255,
+        carbonCategory: "very-high",
+        colorClass: "bg-purple-100 text-purple-800"
+      }
+    ];
+
+    for (const option of options) {
+      await this.createTransportOption(option);
+    }
+  }
+  
+  private async initializeDestinations() {
+    const destinations: InsertDestination[] = [
+      {
+        name: "Costa Rica",
+        country: "Costa Rica",
+        description: "A paradise for eco-tourism with lush rainforests and sustainable practices",
+        image_url: "https://images.unsplash.com/photo-1559128010-7c1ad6e1b6a5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80",
+        rating: 5,
+        ecoCertified: true,
+        carbonImpact: "Low",
+        carbonScore: 85
+      },
+      {
+        name: "Norway",
+        country: "Norway",
+        description: "Sustainable living and breathtaking fjords",
+        image_url: "https://images.unsplash.com/photo-1518621736915-f3b1c41bfd00?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80",
+        rating: 5,
+        ecoCertified: true,
+        carbonImpact: "Very Low",
+        carbonScore: 90
+      },
+      {
+        name: "New Zealand",
+        country: "New Zealand",
+        description: "Clean and green with strong environmental policies",
+        image_url: "https://images.unsplash.com/photo-1507699622108-4be3abd695ad?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80",
+        rating: 4,
+        ecoCertified: true,
+        carbonImpact: "Low",
+        carbonScore: 80
+      },
+      {
+        name: "Switzerland",
+        country: "Switzerland",
+        description: "Efficient public transport and clean energy",
+        image_url: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80",
+        rating: 4,
+        ecoCertified: true,
+        carbonImpact: "Low",
+        carbonScore: 75
+      },
+      {
+        name: "Bhutan",
+        country: "Bhutan",
+        description: "Carbon negative country with rich culture",
+        image_url: "https://images.unsplash.com/photo-1580077871668-6a81a8093e6f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80",
+        rating: 5,
+        ecoCertified: true,
+        carbonImpact: "Negative",
+        carbonScore: 95
+      },
+      {
+        name: "Iceland",
+        country: "Iceland",
+        description: "Renewable energy leader with stunning landscapes",
+        image_url: "https://images.unsplash.com/photo-1519681393784-d120267933ba?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80",
+        rating: 4,
+        ecoCertified: true,
+        carbonImpact: "Very Low",
+        carbonScore: 85
+      }
+    ];
+
+    for (const destination of destinations) {
+      await this.createDestination(destination);
+    }
   }
 
   // User methods
-  async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+  async getUser(id: Types.ObjectId): Promise<User | undefined> {
+    return this.users.get(id.toString());
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    return Array.from(this.users.values()).find(user => user.username === username);
   }
   
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email === email,
-    );
+    return Array.from(this.users.values()).find(user => user.email === email);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userCurrentId++;
-    const user: User = { 
-      ...insertUser, 
-      id, 
-      preferences: null, 
-      createdAt: new Date(),
-      role: insertUser.role || 'user' // Ensure role is never undefined
+    const id = new Types.ObjectId();
+    const user: User = {
+      ...insertUser,
+      _id: id,
+      preferences: {
+        preferredTransportTypes: [],
+        preferredDestinations: [],
+        ecoMode: false,
+        notificationsEnabled: true,
+        theme: "light"
+      },
+      createdAt: new Date()
     };
-    this.users.set(id, user);
+    this.users.set(id.toString(), user);
     return user;
   }
   
-  async updateUserPreferences(userId: number, preferences: UserPreferences): Promise<User | undefined> {
+  async updateUserPreferences(userId: Types.ObjectId, preferences: UserPreferences): Promise<User | undefined> {
     const user = await this.getUser(userId);
     if (!user) return undefined;
     
     const updatedUser: User = {
       ...user,
-      preferences
+      preferences: {
+        ...user.preferences,
+        ...preferences
+      }
     };
     
-    this.users.set(userId, updatedUser);
+    this.users.set(userId.toString(), updatedUser);
     return updatedUser;
   }
   
@@ -157,19 +293,18 @@ export class MemStorage implements IStorage {
     return Array.from(this.destinations.values());
   }
   
-  async getDestination(id: number): Promise<Destination | undefined> {
-    return this.destinations.get(id);
+  async getDestination(id: Types.ObjectId): Promise<Destination | undefined> {
+    return this.destinations.get(id.toString());
   }
   
   async createDestination(destination: InsertDestination): Promise<Destination> {
-    const id = this.destinationCurrentId++;
-    const newDestination: Destination = { 
-      ...destination, 
-      id, 
-      createdAt: new Date(),
-      ecoCertified: destination.ecoCertified ?? false // Ensure ecoCertified is never undefined
+    const id = new Types.ObjectId();
+    const newDestination: Destination = {
+      ...destination,
+      _id: id,
+      createdAt: new Date()
     };
-    this.destinations.set(id, newDestination);
+    this.destinations.set(id.toString(), newDestination);
     return newDestination;
   }
   
@@ -178,68 +313,62 @@ export class MemStorage implements IStorage {
     return Array.from(this.transportOptions.values());
   }
   
-  async getTransportOption(id: number): Promise<TransportOption | undefined> {
-    return this.transportOptions.get(id);
+  async getTransportOption(id: Types.ObjectId): Promise<TransportOption | undefined> {
+    return this.transportOptions.get(id.toString());
   }
   
   async createTransportOption(option: InsertTransportOption): Promise<TransportOption> {
-    const id = this.transportOptionCurrentId++;
-    const newOption: TransportOption = { 
-      ...option, 
-      id, 
-      createdAt: new Date() 
+    const id = new Types.ObjectId();
+    const newOption: TransportOption = {
+      ...option,
+      _id: id,
+      createdAt: new Date()
     };
-    this.transportOptions.set(id, newOption);
+    this.transportOptions.set(id.toString(), newOption);
     return newOption;
   }
   
   // Trip methods
-  async getTrips(userId: number): Promise<Trip[]> {
-    return Array.from(this.trips.values()).filter(trip => trip.userId === userId);
+  async getTrips(userId: Types.ObjectId): Promise<Trip[]> {
+    return Array.from(this.trips.values()).filter(trip => trip.userId.toString() === userId.toString());
   }
   
   async getTripsByDestination(destination: string): Promise<Trip[]> {
-    return Array.from(this.trips.values()).filter(trip => 
-      trip.toLocation.toLowerCase().includes(destination.toLowerCase())
-    );
+    return Array.from(this.trips.values()).filter(trip => trip.toLocation === destination);
   }
   
-  async getTrip(id: number): Promise<Trip | undefined> {
-    return this.trips.get(id);
+  async getTrip(id: Types.ObjectId): Promise<Trip | undefined> {
+    return this.trips.get(id.toString());
   }
   
   async createTrip(trip: InsertTrip): Promise<Trip> {
-    const id = this.tripCurrentId++;
-    const newTrip: Trip = { 
-      ...trip, 
-      id, 
-      userId: trip.userId || null,
-      transportOptionId: trip.transportOptionId || null,
-      createdAt: new Date() 
+    const id = new Types.ObjectId();
+    const newTrip: Trip = {
+      ...trip,
+      _id: id,
+      createdAt: new Date()
     };
-    this.trips.set(id, newTrip);
+    this.trips.set(id.toString(), newTrip);
     return newTrip;
   }
   
-  async deleteTrip(id: number): Promise<boolean> {
-    return this.trips.delete(id);
+  async deleteTrip(id: Types.ObjectId): Promise<boolean> {
+    return this.trips.delete(id.toString());
   }
   
   // Carbon record methods
-  async getCarbonRecords(userId: number): Promise<CarbonRecord[]> {
-    return Array.from(this.carbonRecords.values()).filter(record => record.userId === userId);
+  async getCarbonRecords(userId: Types.ObjectId): Promise<CarbonRecord[]> {
+    return Array.from(this.carbonRecords.values()).filter(record => record.userId.toString() === userId.toString());
   }
   
   async createCarbonRecord(record: InsertCarbonRecord): Promise<CarbonRecord> {
-    const id = this.carbonRecordCurrentId++;
+    const id = new Types.ObjectId();
     const newRecord: CarbonRecord = {
       ...record,
-      id,
-      tripId: record.tripId || null, // Ensure tripId is never undefined
-      details: record.details || null, // Ensure details is never undefined
+      _id: id,
       createdAt: new Date()
     };
-    this.carbonRecords.set(id, newRecord);
+    this.carbonRecords.set(id.toString(), newRecord);
     return newRecord;
   }
   
@@ -248,62 +377,62 @@ export class MemStorage implements IStorage {
     return Array.from(this.listings.values());
   }
   
-  async getListing(id: number): Promise<Listing | undefined> {
-    return this.listings.get(id);
+  async getListing(id: Types.ObjectId): Promise<Listing | undefined> {
+    return this.listings.get(id.toString());
   }
   
   async createListing(listing: InsertListing): Promise<Listing> {
-    const id = this.listingCurrentId++;
+    const id = new Types.ObjectId();
     const newListing: Listing = {
       ...listing,
-      id,
+      _id: id,
       createdAt: new Date()
     };
-    this.listings.set(id, newListing);
+    this.listings.set(id.toString(), newListing);
     return newListing;
   }
   
-  async updateListing(id: number, listing: Partial<InsertListing>): Promise<Listing | undefined> {
+  async updateListing(id: Types.ObjectId, listing: Partial<InsertListing>): Promise<Listing | undefined> {
     const existingListing = await this.getListing(id);
     if (!existingListing) return undefined;
     
     const updatedListing: Listing = {
       ...existingListing,
-      ...listing
+      ...listing,
+      _id: id
     };
     
-    this.listings.set(id, updatedListing);
+    this.listings.set(id.toString(), updatedListing);
     return updatedListing;
   }
   
-  async deleteListing(id: number): Promise<boolean> {
-    return this.listings.delete(id);
+  async deleteListing(id: Types.ObjectId): Promise<boolean> {
+    return this.listings.delete(id.toString());
   }
   
   // Review methods
-  async getReviews(serviceType: string, serviceId: number): Promise<Review[]> {
+  async getReviews(serviceType: string, serviceId: Types.ObjectId): Promise<Review[]> {
     return Array.from(this.reviews.values()).filter(
-      review => review.serviceType === serviceType && review.serviceId === serviceId
+      review => review.serviceType === serviceType && review.serviceId.toString() === serviceId.toString()
     );
   }
   
-  async getReview(id: number): Promise<Review | undefined> {
-    return this.reviews.get(id);
+  async getReview(id: Types.ObjectId): Promise<Review | undefined> {
+    return this.reviews.get(id.toString());
   }
   
   async createReview(review: InsertReview): Promise<Review> {
-    const id = this.reviewCurrentId++;
+    const id = new Types.ObjectId();
     const newReview: Review = {
       ...review,
-      id,
-      approved: review.approved ?? false, // Ensure approved is never undefined
+      _id: id,
       createdAt: new Date()
     };
-    this.reviews.set(id, newReview);
+    this.reviews.set(id.toString(), newReview);
     return newReview;
   }
   
-  async approveReview(id: number): Promise<Review | undefined> {
+  async approveReview(id: Types.ObjectId): Promise<Review | undefined> {
     const review = await this.getReview(id);
     if (!review) return undefined;
     
@@ -312,21 +441,13 @@ export class MemStorage implements IStorage {
       approved: true
     };
     
-    this.reviews.set(id, approvedReview);
+    this.reviews.set(id.toString(), approvedReview);
     return approvedReview;
   }
   
   async getDestinationReviews(destination: string): Promise<Review[]> {
-    // First find all destination IDs that match the name
-    const destinationIds = Array.from(this.destinations.values())
-      .filter(dest => dest.name.toLowerCase().includes(destination.toLowerCase()))
-      .map(dest => dest.id);
-    
-    // Then find all reviews for those destinations
     return Array.from(this.reviews.values()).filter(
-      review => review.serviceType === 'destination' && 
-                destinationIds.includes(review.serviceId) &&
-                review.approved
+      review => review.serviceType === 'destination' && review.serviceId.toString() === destination
     );
   }
   
@@ -374,117 +495,53 @@ export class MemStorage implements IStorage {
     const routeKey = `${from.toLowerCase()}-${to.toLowerCase()}`;
     return routes[routeKey] || 500; // Default to 500km if route not found
   }
-  
-  // Initialize with transport options data
-  private initializeTransportOptions() {
-    const options: InsertTransportOption[] = [
-      {
-        name: "Train",
-        type: "train",
-        icon: "train",
-        carbonPerKm: 20,
-        carbonCategory: "low",
-        colorClass: "success"
-      },
-      {
-        name: "Bus",
-        type: "bus",
-        icon: "bus",
-        carbonPerKm: 25,
-        carbonCategory: "low",
-        colorClass: "success"
-      },
-      {
-        name: "Car (Shared)",
-        type: "car",
-        icon: "car-side",
-        carbonPerKm: 45,
-        carbonCategory: "medium",
-        colorClass: "warning"
-      },
-      {
-        name: "Flight",
-        type: "plane",
-        icon: "plane",
-        carbonPerKm: 170,
-        carbonCategory: "high",
-        colorClass: "error"
-      }
-    ];
-    
-    options.forEach(option => {
-      this.createTransportOption(option);
-    });
+
+  // Itinerary methods
+  async createItinerary(data: { sourceCity: string; destinationCity: string; numberOfDays: number }): Promise<any> {
+    // For in-memory storage, return a mock itinerary
+    return {
+      sourceCity: data.sourceCity,
+      destinationCity: data.destinationCity,
+      numberOfDays: data.numberOfDays,
+      dailyItinerary: Array(data.numberOfDays).fill({
+        activities: [],
+        lunch: null,
+        hotel: null
+      })
+    };
   }
-  
-  // Initialize with destination data
-  private initializeDestinations() {
-    const destinations: InsertDestination[] = [
-      {
-        name: "Costa Rica",
-        country: "Costa Rica",
-        description: "Pioneer in ecotourism with rich biodiversity, rainforests, and sustainable practices.",
-        image_url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-        rating: 48,
-        ecoCertified: true,
-        carbonImpact: "Low Carbon Impact",
-        carbonScore: 1
-      },
-      {
-        name: "Norway",
-        country: "Norway",
-        description: "Stunning fjords and mountains with a commitment to renewable energy and conservation.",
-        image_url: "https://images.unsplash.com/photo-1543161949-1f9193812ce8?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-        rating: 47,
-        ecoCertified: true,
-        carbonImpact: "Low Carbon Impact",
-        carbonScore: 1
-      },
-      {
-        name: "New Zealand",
-        country: "New Zealand",
-        description: "Leading in sustainable tourism with pristine landscapes and conservation efforts.",
-        image_url: "https://images.unsplash.com/photo-1570459027562-4a916cc6113f?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-        rating: 49,
-        ecoCertified: true,
-        carbonImpact: "Medium Carbon Impact",
-        carbonScore: 2
-      },
-      {
-        name: "Iceland",
-        country: "Iceland",
-        description: "Geothermal wonders and untouched nature with a strong commitment to sustainability.",
-        image_url: "https://images.unsplash.com/photo-1504206270341-2bae970cfc42?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-        rating: 47,
-        ecoCertified: true,
-        carbonImpact: "Medium Carbon Impact",
-        carbonScore: 2
-      },
-      {
-        name: "Slovenia",
-        country: "Slovenia",
-        description: "Green destination with pristine forests, lakes and sustainable tourism infrastructure.",
-        image_url: "https://images.unsplash.com/photo-1553292558-92e5286cf507?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-        rating: 46,
-        ecoCertified: true,
-        carbonImpact: "Low Carbon Impact",
-        carbonScore: 1
-      },
-      {
-        name: "Bhutan",
-        country: "Bhutan",
-        description: "Carbon-negative country with strictly managed tourism and pristine natural areas.",
-        image_url: "https://images.unsplash.com/photo-1515695820260-1e329888abd1?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-        rating: 48,
-        ecoCertified: true,
-        carbonImpact: "Low Carbon Impact",
-        carbonScore: 1
-      }
-    ];
-    
-    destinations.forEach(destination => {
-      this.createDestination(destination);
-    });
+
+  async exportItineraryToPDF(itinerary: any): Promise<Buffer> {
+    // For in-memory storage, return an empty buffer
+    return Buffer.from('');
+  }
+
+  async getDestinationById(id: Types.ObjectId): Promise<Destination | null> {
+    return this.destinations.get(id.toString()) || null;
+  }
+
+  async getTransportOptionById(id: Types.ObjectId): Promise<TransportOption | null> {
+    return this.transportOptions.get(id.toString()) || null;
+  }
+
+  async getTripById(id: Types.ObjectId): Promise<Trip | null> {
+    return this.trips.get(id.toString()) || null;
+  }
+
+  async getListingById(id: Types.ObjectId): Promise<Listing | null> {
+    return this.listings.get(id.toString()) || null;
+  }
+
+  async getReviewById(id: Types.ObjectId): Promise<Review | null> {
+    return this.reviews.get(id.toString()) || null;
+  }
+
+  async getCarbonRecordById(id: Types.ObjectId): Promise<CarbonRecord | null> {
+    return this.carbonRecords.get(id.toString()) || null;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
   }
 }
 

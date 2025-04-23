@@ -1,82 +1,53 @@
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface TransportOptionProps {
   transportType: string;
   name: string;
   icon: string;
-  duration: string;
   carbonFootprint: number;
   colorClass: string;
-  onSelect?: () => void;
+  savings?: number;
 }
 
 const TransportOption = ({
   transportType,
   name,
   icon,
-  duration,
   carbonFootprint,
   colorClass,
-  onSelect
+  savings
 }: TransportOptionProps) => {
-  // Map color class to tailwind classes
-  const getColorClasses = (colorClass: string) => {
-    switch (colorClass) {
-      case 'success':
-        return {
-          border: 'border-success',
-          bg: 'bg-success bg-opacity-10',
-          text: 'text-success'
-        };
-      case 'warning':
-        return {
-          border: 'border-warning',
-          bg: 'bg-warning bg-opacity-10',
-          text: 'text-warning'
-        };
-      case 'error':
-        return {
-          border: 'border-error',
-          bg: 'bg-error bg-opacity-10',
-          text: 'text-error'
-        };
-      default:
-        return {
-          border: 'border-neutral',
-          bg: 'bg-neutral bg-opacity-10',
-          text: 'text-neutral'
-        };
+  const formatCarbon = (grams: number) => {
+    if (grams >= 1000) {
+      return `${(grams / 1000).toFixed(1)} kg`;
     }
+    return `${grams.toFixed(0)} g`;
   };
 
-  const colors = getColorClasses(colorClass);
-
   return (
-    <div className={`bg-white p-4 rounded-md shadow-sm border-l-4 ${colors.border}`}>
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-        <div className="flex items-center mb-3 sm:mb-0">
-          <div className={`${colors.bg} p-2 rounded-full`}>
-            <i className={`fas fa-${icon} ${colors.text} text-xl`}></i>
+    <Card className={cn("overflow-hidden", colorClass)}>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">{icon}</span>
+            <div>
+              <h4 className="font-medium">{name}</h4>
+              <p className="text-sm text-muted-foreground">{transportType}</p>
+            </div>
           </div>
-          <div className="ml-3">
-            <h4 className="font-heading font-medium text-neutral-darkest">{name}</h4>
-            <span className="text-sm text-neutral-dark">{duration}</span>
+          
+          <div className="text-right">
+            <div className="font-semibold">{formatCarbon(carbonFootprint)} CO₂</div>
+            {savings !== undefined && savings > 0 && (
+              <div className="text-sm text-green-600">
+                Saves {formatCarbon(savings)} CO₂
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex items-center">
-          <div className="mr-6">
-            <span className="block text-sm text-neutral-dark">Carbon per person</span>
-            <span className={`font-semibold ${colors.text}`}>{carbonFootprint} kg CO2</span>
-          </div>
-          <Button 
-            onClick={onSelect} 
-            className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md text-sm font-medium"
-          >
-            Select
-          </Button>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
 

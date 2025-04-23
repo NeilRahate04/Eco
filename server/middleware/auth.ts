@@ -6,7 +6,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: {
-        id: number;
+        id: string;
         role: string;
       };
     }
@@ -27,7 +27,7 @@ export const verifyToken = (req: Request, res: Response, next: NextFunction) => 
   try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as {
-      id: number;
+      id: string;
       role: string;
     };
     
@@ -52,7 +52,7 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
 /**
  * Utility to generate JWT token
  */
-export const generateToken = (user: { id: number; role: string }) => {
+export const generateToken = (user: { id: string; role: string }) => {
   return jwt.sign(
     { id: user.id, role: user.role },
     process.env.JWT_SECRET || 'dev-secret',

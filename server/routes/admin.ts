@@ -2,7 +2,8 @@ import express from 'express';
 import { storage } from '../storage';
 import { verifyToken, isAdmin } from '../middleware/auth';
 import { validateSchema } from '../middleware/validate';
-import { insertListingSchema } from '@shared/schema';
+import { insertListingSchema } from "@shared/mongodb-schema";
+import { Types } from "mongoose";
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.get('/dashboard', verifyToken, isAdmin, async (req, res) => {
     const serviceTypes = ['destination', 'transport', 'listing'];
     for (const serviceType of serviceTypes) {
       try {
-        const reviews = await storage.getReviews(serviceType, 0);
+        const reviews = await storage.getReviews(serviceType, new Types.ObjectId());
         allReviews.push(...reviews);
       } catch (error) {
         // Ignore errors in this demo implementation
@@ -70,7 +71,7 @@ router.post('/listings', verifyToken, isAdmin, validateSchema(insertListingSchem
  */
 router.put('/listings/:id', verifyToken, isAdmin, async (req, res) => {
   try {
-    const listingId = parseInt(req.params.id);
+    const listingId = new Types.ObjectId(req.params.id);
     
     // Get the listing
     const listing = await storage.getListing(listingId);
@@ -97,7 +98,7 @@ router.put('/listings/:id', verifyToken, isAdmin, async (req, res) => {
  */
 router.delete('/listings/:id', verifyToken, isAdmin, async (req, res) => {
   try {
-    const listingId = parseInt(req.params.id);
+    const listingId = new Types.ObjectId(req.params.id);
     
     // Get the listing
     const listing = await storage.getListing(listingId);
@@ -138,7 +139,7 @@ router.get('/listings', verifyToken, isAdmin, async (req, res) => {
  */
 router.get('/listings/:id', verifyToken, isAdmin, async (req, res) => {
   try {
-    const listingId = parseInt(req.params.id);
+    const listingId = new Types.ObjectId(req.params.id);
     
     const listing = await storage.getListing(listingId);
     if (!listing) {

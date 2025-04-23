@@ -1,9 +1,7 @@
 import express, { type Express } from "express";
-import { createServer, type Server } from "http";
-import cors from "cors";
 import cookieParser from "cookie-parser";
-import { storage } from "./storage";
-import { tripSearchSchema, carbonCalcSchema, insertTripSchema } from "@shared/schema";
+import { MongoDBStorage } from "./mongodb-storage";
+import { tripSearchSchema, carbonCalcSchema, insertTripSchema } from "@shared/mongodb-schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 
@@ -16,9 +14,11 @@ import reviewsRoutes from "./routes/reviews";
 import adminRoutes from "./routes/admin";
 import listingsRoutes from "./routes/listings";
 
-export async function registerRoutes(app: Express): Promise<Server> {
+// Create MongoDB storage instance
+const storage = new MongoDBStorage();
+
+export function registerRoutes(app: Express) {
   // Middleware
-  app.use(cors());
   app.use(cookieParser());
 
   // API Routes
@@ -32,6 +32,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.use("/reviews", reviewsRoutes);
   apiRouter.use("/admin", adminRoutes);
   apiRouter.use("/listings", listingsRoutes);
+  
+  // Itinerary routes
+  apiRouter.post("/itinerary", async (req, res) => {
+    try {
+      console.log('Received itinerary request:', req.body);
+      const { sourceCity, destinationCity, numberOfDays } = req.body;
+      
+      if (!sourceCity || !destinationCity || !numberOfDays) {
+        return res.status(400).json({ 
+          message: "Missing required fields",
+          received: { sourceCity, destinationCity, numberOfDays }
+        });
+      }
+
+      const itinerary = await storage.createItinerary({
+        sourceCity,
+        destinationCity,
+        numberOfDays
+      });
+      
+      console.log('Generated itinerary:', itinerary);
+      res.json(itinerary);
+    } catch (error) {
+      console.error('Error creating itinerary:', error);
+      res.status(500).json({ 
+        message: "Failed to create itinerary",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  apiRouter.get("/itineraries", async (req, res) => {
+    try {
+      const itineraries = await storage.getItineraries();
+      res.json(itineraries);
+    } catch (error) {
+      console.error('Error fetching itineraries:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch itineraries",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  apiRouter.get("/itinerary/:id", async (req, res) => {
+    try {
+      const itinerary = await storage.getItinerary(req.params.id);
+      if (!itinerary) {
+        return res.status(404).json({ message: "Itinerary not found" });
+      }
+      res.json(itinerary);
+    } catch (error) {
+      console.error('Error fetching itinerary:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch itinerary",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  apiRouter.post("/itinerary/export", async (req, res) => {
+    try {
+      const itinerary = req.body;
+      console.log('Received export request with itinerary:', JSON.stringify(itinerary, null, 2));
+      
+      if (!itinerary || !itinerary.days || !itinerary.source || !itinerary.destination) {
+        console.error('Invalid itinerary data received:', itinerary);
+        return res.status(400).json({ 
+          message: "Invalid itinerary data",
+          received: itinerary
+        });
+      }
+
+      const pdfBuffer: Buffer = await storage.exportItineraryToPDF(itinerary);
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename=eco-itinerary.pdf');
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Detailed error exporting itinerary:', error);
+      res.status(500).json({ 
+        message: "Failed to export itinerary",
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+  });
   
   // Destinations routes
   apiRouter.get("/destinations", async (req, res) => {
@@ -248,14 +336,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Mount the API router
-  app.use("/api", apiRouter);
-
-  // 404 handler for API routes
-  app.use("/api/*", (req, res) => {
-    res.status(404).json({ message: "API endpoint not found" });
-  });
-
-  const httpServer = createServer(app);
-  return httpServer;
+  return apiRouter;
 }

@@ -3,20 +3,17 @@ const TestimonialsSection = () => {
     {
       quote: "EcoTravel helped me plan a cross-country trip that reduced my carbon footprint by 70% compared to flying. The train routes were scenic and the experience was unforgettable.",
       name: "Sarah J.",
-      trip: "Norway to Sweden trip",
-      avatar: "https://randomuser.me/api/portraits/women/12.jpg"
+      trip: "Norway to Sweden trip"
     },
     {
       quote: "I love how easy it is to see the environmental impact of each travel option. It made me rethink how I travel and now I always choose the greenest option when possible.",
       name: "Michael T.",
-      trip: "Costa Rica explorer",
-      avatar: "https://randomuser.me/api/portraits/men/32.jpg"
+      trip: "Costa Rica explorer"
     },
     {
       quote: "Finding eco-certified accommodations was so simple. My family and I felt good knowing our vacation supported sustainable businesses and local communities.",
       name: "Elena R.",
-      trip: "Family trip to New Zealand",
-      avatar: "https://randomuser.me/api/portraits/women/68.jpg"
+      trip: "Family trip to New Zealand"
     }
   ];
 
@@ -43,14 +40,9 @@ const TestimonialsSection = () => {
                 </div>
               </div>
               <p className="eco-quote text-neutral-darkest italic mb-4">{testimonial.quote}</p>
-              <div className="flex items-center mt-4">
-                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                  <i className="fas fa-user text-gray-600"></i>
-                </div>
-                <div className="ml-3">
-                  <h4 className="font-heading font-medium text-neutral-darkest">{testimonial.name}</h4>
-                  <p className="text-sm text-neutral-dark">{testimonial.trip}</p>
-                </div>
+              <div className="mt-4">
+                <h4 className="font-heading font-medium text-neutral-darkest">{testimonial.name}</h4>
+                <p className="text-sm text-neutral-dark">{testimonial.trip}</p>
               </div>
             </div>
           ))}

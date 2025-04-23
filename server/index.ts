@@ -7,12 +7,14 @@ import { MongoDBStorage } from "./mongodb-storage";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configure CORS for development
+// Configure CORS for both development and production
 const allowedOrigins = [
   'http://localhost:5000',
   'http://localhost:5173',
   'http://localhost:5375',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'https://frontend-9hlc.onrender.com',
+  'https://eco-9w2a.onrender.com'
 ];
 
 app.use(cors({
@@ -30,7 +32,10 @@ app.use(cors({
 
 // Additional CORS headers
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "http://localhost:5375");
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
   res.header("Access-Control-Allow-Credentials", "true");
@@ -64,15 +69,19 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ message: 'Something broke!' });
 });
 
-// Start server after MongoDB connection
+// Start the server
 const startServer = async () => {
-  await connectWithRetry();
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+  try {
+    await connectWithRetry();
+    registerRoutes(app);
+    
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 };
 
-startServer().catch((error) => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-});
+startServer();

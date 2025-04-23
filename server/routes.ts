@@ -64,7 +64,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  apiRouter.get("/itineraries", async (req, res) => {
+  apiRouter.get("/itinerary", async (req, res) => {
     try {
       const itineraries = await storage.getItineraries();
       res.json(itineraries);

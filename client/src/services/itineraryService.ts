@@ -1,6 +1,5 @@
 import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:5000';
+import { API_BASE_URL } from '@/lib/config';
 
 export interface ItineraryRequest {
   sourceCity: string;
@@ -44,22 +43,22 @@ export interface ItineraryResponse {
 }
 
 export const createItinerary = async (data: ItineraryRequest): Promise<ItineraryResponse> => {
-  const response = await axios.post(`${API_BASE_URL}/api/itinerary`, data);
+  const response = await axios.post(`${API_BASE_URL}/itinerary`, data);
   return response.data;
 };
 
 export const getItineraries = async (): Promise<ItineraryResponse[]> => {
-  const response = await axios.get(`${API_BASE_URL}/api/itineraries`);
-  return response.data;
-};
-
-export const getItinerary = async (id: string): Promise<ItineraryResponse> => {
   const response = await axios.get(`${API_BASE_URL}/itinerary`);
   return response.data;
 };
 
+export const getItinerary = async (id: string): Promise<ItineraryResponse> => {
+  const response = await axios.get(`${API_BASE_URL}/itinerary/${id}`);
+  return response.data;
+};
+
 export const exportToPDF = async (itinerary: ItineraryResponse): Promise<Blob> => {
-  const response = await axios.post(`${API_BASE_URL}/api/itinerary/export`, itinerary, {
+  const response = await axios.post(`${API_BASE_URL}/itinerary/export`, itinerary, {
     responseType: 'blob'
   });
   return response.data;

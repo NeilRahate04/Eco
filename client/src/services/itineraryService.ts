@@ -54,7 +54,7 @@ export const getItineraries = async (): Promise<ItineraryResponse[]> => {
 };
 
 export const getItinerary = async (id: string): Promise<ItineraryResponse> => {
-  const response = await axios.get(`${API_BASE_URL}/api/itinerary/${id}`);
+  const response = await axios.get(`${API_BASE_URL}/itinerary`);
   return response.data;
 };
 

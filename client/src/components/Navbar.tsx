@@ -11,7 +11,7 @@ const Navbar = () => {
   
   // Fetch itineraries to check if there's a current one
   const { data: itineraries } = useQuery({
-    queryKey: ['/api/itineraries'],
+    queryKey: ['/itinerary'],
     queryFn: getItineraries
   });
 

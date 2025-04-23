@@ -11,7 +11,7 @@ const MyItineraries = () => {
   
   // Fetch user's itineraries
   const { data: itineraries, isLoading } = useQuery<ItineraryResponse[]>({
-    queryKey: ['/api/itineraries'],
+    queryKey: ['/itinerary'],
   });
   
   // Mock no itineraries state since we don't have real user authentication yet

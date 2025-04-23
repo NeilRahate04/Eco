@@ -5,7 +5,7 @@ import { MapPin, Clock, Calendar, Star } from "lucide-react";
 
 const MyItineraries = () => {
   const { data: itineraries, isLoading, error } = useQuery({
-    queryKey: ['/api/itineraries'],
+    queryKey: ['/itinerary'],
     queryFn: getItineraries
   });
 

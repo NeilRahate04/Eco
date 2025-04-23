@@ -31,7 +31,15 @@ export default defineConfig({
   root: path.resolve(__dirname, "client"),
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
-    emptyOutDir: true,
+    emptyOutDir: false,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+        },
+      },
+    },
   },
   server: {
     port: 5375,
@@ -40,7 +48,7 @@ export default defineConfig({
         target: 'https://eco-9w2a.onrender.com',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path // Keep the /api prefix
+        rewrite: (path) => path
       }
     }
   }

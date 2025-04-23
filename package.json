@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "prebuild": "if (!(Test-Path dist)) { New-Item -ItemType Directory -Path dist }; if (!(Test-Path dist\\public)) { New-Item -ItemType Directory -Path dist\\public }",
+    "prebuild": "npx rimraf dist && npx mkdirp dist/public",
     "build:client": "vite build",
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "dev": "tsx server/index.ts",
@@ -102,7 +102,9 @@
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0"
+    "zod-validation-error": "^3.4.0",
+    "rimraf": "^5.0.5",
+    "mkdirp": "^3.0.1"
   },
   "devDependencies": {
     "@replit/vite-plugin-cartographer": "^0.0.11",
